@@ -20,7 +20,9 @@ insert_permissions:
         _or:
           - _and:
               - type:
-                  _neq: db_write
+                  _nin:
+                    - db_write
+                    - notify
               - workflow:
                   organization:
                     org_members:
@@ -32,7 +34,9 @@ insert_permissions:
                         _eq: X-Hasura-User-Id
           - _and:
               - type:
-                  _eq: db_write
+                  _in:
+                    - db_write
+                    - notify
               - workflow:
                   organization:
                     org_members:

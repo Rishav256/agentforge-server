@@ -17,6 +17,18 @@ const GET_WORKFLOW_AND_MEMBERSHIP = `
   }
 `;
 
+const CHECK_ACTIVE_RUN = `
+  query CheckActiveRun($workflow_id: uuid!) {
+    workflow_runs(
+      where: { workflow_id: { _eq: $workflow_id }, status: { _in: ["running", "paused"] } }
+      limit: 1
+    ) {
+      id
+      status
+    }
+  }
+`;
+
 const CREATE_RUN = `
   mutation CreateRun($workflow_id: uuid!, $triggered_by: uuid!) {
     insert_workflow_runs_one(object: {
@@ -54,6 +66,17 @@ export default async function handler(req: Request, res: Response) {
     const { quota_limit, quota_used } = workflow.organization;
     if (quota_used >= quota_limit)
       return actionError(res, 429, 'Organization quota exhausted');
+
+    const activeRunCheck = await adminGraphQL<any>(CHECK_ACTIVE_RUN, {
+      workflow_id: workflowId,
+    });
+    if (activeRunCheck.workflow_runs.length > 0) {
+      return actionError(
+        res,
+        409,
+        `Workflow already has an active run (status: ${activeRunCheck.workflow_runs[0].status})`,
+      );
+    }
 
     const { insert_workflow_runs_one: run } = await adminGraphQL<any>(
       CREATE_RUN,
