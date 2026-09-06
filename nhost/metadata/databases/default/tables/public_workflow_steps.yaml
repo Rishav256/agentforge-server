@@ -54,11 +54,12 @@ select_permissions:
   - role: user
     permission:
       columns:
-        - step_order
         - config
         - created_at
-        - type
         - id
+        - position
+        - step_order
+        - type
         - workflow_id
       filter:
         workflow:
