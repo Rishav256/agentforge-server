@@ -73,6 +73,7 @@ update_permissions:
     permission:
       columns:
         - config
+        - position
         - step_order
         - type
       filter:
