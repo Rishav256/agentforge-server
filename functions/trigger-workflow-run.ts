@@ -42,10 +42,10 @@ export default async function handler(req: Request, res: Response) {
   try {
     if (req.method !== 'POST')
       return actionError(res, 405, 'Method not allowed');
-
+    console.log('RAW BODY:', JSON.stringify(req.body));
     const { input, session_variables } = req.body;
     const userId = session_variables?.['x-hasura-user-id'];
-    const workflowId = input?.workflow_id;
+    const workflowId = input?.input?.workflow_id;
 
     if (!userId) return actionError(res, 401, 'Missing session user');
     if (!workflowId) return actionError(res, 400, 'workflow_id is required');

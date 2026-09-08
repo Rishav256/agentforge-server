@@ -40,7 +40,7 @@ export default async function handler(req: Request, res: Response) {
 
     const { input, session_variables } = req.body;
     const userId = session_variables?.['x-hasura-user-id'];
-    const stepRunId = input?.step_run_id;
+    const stepRunId = input?.input?.step_run_id;
 
     if (!userId) return actionError(res, 401, 'Missing session user');
     if (!stepRunId) return actionError(res, 400, 'step_run_id is required');
