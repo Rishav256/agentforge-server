@@ -1,40 +1,16 @@
 import type { Request, Response } from 'express';
 import { adminGraphQL } from './_lib/hasura';
 import { actionError } from './_lib/actionError';
-import { runWorkflowLoop } from './_lib/runWorkflow';
+import { startWorkflowRun } from './_lib/startRun';
 
 const GET_WORKFLOW_AND_MEMBERSHIP = `
   query GetWorkflowAndMembership($workflow_id: uuid!, $user_id: uuid!) {
     workflows_by_pk(id: $workflow_id) {
       id
-      org_id
       organization {
-        quota_limit
-        quota_used
         org_members(where: { user_id: { _eq: $user_id } }) { role }
       }
     }
-  }
-`;
-
-const CHECK_ACTIVE_RUN = `
-  query CheckActiveRun($workflow_id: uuid!) {
-    workflow_runs(
-      where: { workflow_id: { _eq: $workflow_id }, status: { _in: ["running", "paused"] } }
-      limit: 1
-    ) {
-      id
-      status
-    }
-  }
-`;
-
-const CREATE_RUN = `
-  mutation CreateRun($workflow_id: uuid!, $triggered_by: uuid!) {
-    insert_workflow_runs_one(object: {
-      workflow_id: $workflow_id, status: "running", triggered_by: $triggered_by,
-      trigger_type: "manual", started_at: "now()"
-    }) { id }
   }
 `;
 
@@ -42,7 +18,7 @@ export default async function handler(req: Request, res: Response) {
   try {
     if (req.method !== 'POST')
       return actionError(res, 405, 'Method not allowed');
-    console.log('RAW BODY:', JSON.stringify(req.body));
+
     const { input, session_variables } = req.body;
     const userId = session_variables?.['x-hasura-user-id'];
     const workflowId = input?.input?.workflow_id;
@@ -63,37 +39,16 @@ export default async function handler(req: Request, res: Response) {
     if (membership.role === 'viewer')
       return actionError(res, 403, 'Viewers cannot trigger workflow runs');
 
-    const { quota_limit, quota_used } = workflow.organization;
-    if (quota_used >= quota_limit)
-      return actionError(res, 429, 'Organization quota exhausted');
-
-    const activeRunCheck = await adminGraphQL<any>(CHECK_ACTIVE_RUN, {
-      workflow_id: workflowId,
-    });
-    if (activeRunCheck.workflow_runs.length > 0) {
-      return actionError(
-        res,
-        409,
-        `Workflow already has an active run (status: ${activeRunCheck.workflow_runs[0].status})`,
-      );
-    }
-
-    const { insert_workflow_runs_one: run } = await adminGraphQL<any>(
-      CREATE_RUN,
-      {
-        workflow_id: workflowId,
-        triggered_by: userId,
-      },
-    );
-
-    const result = await runWorkflowLoop({
+    const outcome = await startWorkflowRun({
       workflowId,
-      workflowRunId: run.id,
-      orgId: workflow.org_id,
-      fromStepOrder: 0,
+      triggerType: 'manual',
+      triggeredBy: userId,
     });
 
-    res.status(200).json({ run_id: run.id, status: result.status });
+    if (outcome.ok === false)
+      return actionError(res, outcome.status, outcome.message);
+
+    res.status(200).json({ run_id: outcome.runId, status: outcome.status });
   } catch (err: any) {
     console.error('triggerWorkflowRun error:', err);
     return actionError(res, 500, 'Internal error triggering workflow run');
